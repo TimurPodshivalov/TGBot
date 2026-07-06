@@ -1,9 +1,11 @@
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
+import os
 import random
 from typing import List, Dict
 
-TOKEN = 'Bot_Token'
+TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
+bot = Bot(token=TOKEN)
 
 GREETINGS = [
     "Привет, {}! 👋",
@@ -97,9 +99,6 @@ def get_events_keyboard(event_index: int = 0, total_events: int = len(EVENTS)):
     if nav_buttons:
         keyboard.append(nav_buttons)
 
-    # Кнопка возврата в главное меню
-    keyboard.append([InlineKeyboardButton("🔙 В главное меню", callback_data="back_to_menu")])
-
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -144,13 +143,11 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     name = user.first_name if user.first_name else "друг"
 
-    response = f"""
-    {name}, вот информация обо мне:
+    response = f"""{name}, вот информация обо мне:
 
-    Я - тренировочный бот для практики Росстелеком.
-    Показываю список событий и информацию о себе.
-    Разработчик: Подшивалов Тимур*
-    """
+Я - тренировочный бот для практики Росстелеком.
+Показываю список событий и информацию о себе.
+Разработчик: Подшивалов Тимур"""
 
     if update.message:
         await update.message.reply_text(
@@ -213,14 +210,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Листаем вперед
         new_index = min(len(EVENTS) - 1, current_index + 1)
         user_positions[user_id] = new_index
-
-    elif data == "back_to_menu":
-        # Возврат в главное меню
-        await query.edit_message_text(
-            "Вы вернулись в главное меню. Используйте кнопки ниже:",
-            reply_markup=get_main_keyboard()
-        )
-        return
 
     elif data == "page_info":
         # Просто показываем номер страницы
