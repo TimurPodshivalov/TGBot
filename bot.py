@@ -5,7 +5,7 @@ import random
 from typing import List, Dict
 
 TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
-bot = Bot(token=TOKEN)
+
 
 GREETINGS = [
     "Привет, {}! 👋",
