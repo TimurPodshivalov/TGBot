@@ -15,6 +15,7 @@ GREETINGS = [
     "Рад видеть тебя, {}! 🤗"
 ]
 
+
 EVENTS: List[Dict] = [
     {
         "id": 1,
@@ -129,7 +130,7 @@ EVENTS: List[Dict] = [
 ]
 
 user_positions = {}
-
+user_states = {}
 
 def get_main_keyboard():
     keyboard = [
@@ -280,47 +281,49 @@ async def events(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     user_id = update.effective_user.id
-    data = query.data
 
-    # Инициализируем позицию пользователя, если ее нет
-    if user_id not in user_positions:
-        user_positions[user_id] = 0
-
-    current_index = user_positions[user_id]
-
-    # Обработка навигации
-    if data.startswith("prev_"):
-        # Листаем назад
-        new_index = max(0, current_index - 1)
-        user_positions[user_id] = new_index
-
-    elif data.startswith("next_"):
-        # Листаем вперед
-        new_index = min(len(EVENTS) - 1, current_index + 1)
-        user_positions[user_id] = new_index
-
-    elif data == "page_info":
-        # Просто показываем номер страницы
-        await query.answer(f"Событие {current_index + 1} из {len(EVENTS)}")
+    if user_id not in user_states:
+        # Если пользователь не выбирал период, ничего не делаем
         return
 
-    # Обновляем отображаемое событие
-    new_index = user_positions[user_id]
-    event = EVENTS[new_index]
-    message_text = format_event(event, new_index, len(EVENTS))
+    state = user_states[user_id]
+    period_str = state['period']
+    filtered_events = filter_events_by_period(period_str)
+    total = len(filtered_events)
 
-    await query.edit_message_text(
-        message_text,
-        parse_mode='Markdown',
-        reply_markup=get_events_keyboard(new_index, len(EVENTS))
-    )
+    data = query.data
+
+    if data.startswith("prev_"):
+        new_index = max(0, state['index'] - 1)
+        state['index'] = new_index
+
+    elif data.startswith("next_"):
+        new_index = min(total - 1, state['index'] + 1)
+        state['index'] = new_index
+
+    elif data == "page_info":
+        await query.answer(f"Событие {state['index'] + 1} из {total}")
+        return
+
+    # Обновляем сообщение с текущим событием
+    if total > 0:
+        message = format_event(filtered_events[state['index']], state['index'], total)
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=get_events_keyboard(state['index'], total)
+        )
+    else:
+        await query.edit_message_text(
+            f"Нет событий за период: {period_str}.",
+        )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
+    user_id = user.id
     name = user.first_name if user.first_name else "друг"
 
     if text in ["За день", "За неделю", "За месяц"]:
@@ -331,17 +334,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         period_str = period_map[text]
         filtered_events = filter_events_by_period(period_str)
+        total_events = len(filtered_events)
 
-        if filtered_events:
-            for idx, event in enumerate(filtered_events):
-                message = format_event(event, idx, len(filtered_events))
-                await update.message.reply_text(
-                    message,
-                    parse_mode='Markdown'
-                )
+        # Сохраняем состояние пользователя
+        user_states[user_id] = {'period': period_str, 'index': 0}
+
+        # Отправляем первое событие этого периода
+        if total_events > 0:
+            message = format_event(filtered_events[0], 0, total_events)
+            await update.message.reply_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=get_events_keyboard(0, total_events)
+            )
         else:
             await update.message.reply_text(
-                f"Нет событий за выбранный период: {period_str}."
+                f"Нет событий за период: {period_str}."
             )
     elif text == "📚 О боте":
         await about(update, context)
@@ -362,30 +370,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{name}, я понимаю только команды. Используйте кнопки ниже или /start для начала.",
             reply_markup=get_main_keyboard()
         )
+
 async def handle_callback_query(update, context):
     query = update.callback_query
     await query.answer()
 
+    user_id = update.effective_user.id
     data = query.data
-    period_map = {
-        'day': 'день',
-        'week': 'неделю',
-        'month': 'месяц'
-    }
-    period_str = period_map.get(data)
-    filtered_events = filter_events_by_period(period_str)
 
-    if filtered_events:
-        for idx, event in enumerate(filtered_events):
-            message = format_event(event, idx, len(filtered_events))
-            await query.message.reply_text(
-                message,
-                parse_mode='Markdown'
-            )
-    else:
-        await query.message.reply_text(
-            f"Нет событий за выбранный период: {period_str}."
-        )
+    # Обработка навигации по событиям
+    if user_id not in user_states:
+        # Если пользователь не выбирал период, ничего не делаем
+        return
+
+    state = user_states[user_id]
+    period_str = state['period']
+    filtered_events = filter_events_by_period(period_str)
+    total = len(filtered_events)
+
+    if total == 0:
+        await query.edit_message_text(f"Нет событий за период: {period_str}.")
+        return
+
+    if data.startswith("prev_"):
+        new_index = max(0, state['index'] - 1)
+        state['index'] = new_index
+    elif data.startswith("next_"):
+        new_index = min(total - 1, state['index'] + 1)
+        state['index'] = new_index
+    elif data == "page_info":
+        await query.answer(f"Событие {state['index'] + 1} из {total}")
+        return
+
+    # Обновляем сообщение с текущим событием
+    message = format_event(filtered_events[state['index']], state['index'], total)
+    await query.edit_message_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=get_events_keyboard(state['index'], total)
+    )
 
 def main():
     # Создаем приложение
