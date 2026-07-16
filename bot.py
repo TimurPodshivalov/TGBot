@@ -7,7 +7,6 @@ import datetime
 
 TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 
-
 GREETINGS = [
     "Привет, {}! 👋",
     "Здравствуй, {}! 😊",
@@ -130,41 +129,23 @@ EVENTS: List[Dict] = [
 
 user_positions = {}
 
-
 def get_main_keyboard():
-    keyboard = [
-        [KeyboardButton("📚 О боте"), KeyboardButton("🎉 События")],
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
-
-
-def get_events_keyboard(event_index: int = 0, total_events: int = len(EVENTS)):
-    keyboard = []
-
-    # Кнопки навигации
-    nav_buttons = []
-
-    if event_index > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"prev_{event_index}"))
-
-    # Номер события
-    nav_buttons.append(InlineKeyboardButton(f"{event_index + 1}/{total_events}", callback_data="page_info"))
-
-    if event_index < total_events - 1:
-        nav_buttons.append(InlineKeyboardButton("Вперед ▶️", callback_data=f"next_{event_index}"))
-
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-
-    return InlineKeyboardMarkup(keyboard)
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("📚 О боте"), KeyboardButton("🎉 События")],
+        ],
+        resize_keyboard=True
+    )
 
 def get_timeframe_menu():
-    keyboard = [
-        [KeyboardButton("За день"), KeyboardButton("За неделю")],
-        [KeyboardButton("За месяц")],
-        [KeyboardButton("Вернуться в меню")]
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("За день"), KeyboardButton("За неделю")],
+            [KeyboardButton("За месяц")],
+            [KeyboardButton("Вернуться в меню")]
+        ],
+        resize_keyboard=True
+    )
 
 def filter_events_by_period(period: str):
     today = datetime.date.today()
@@ -175,14 +156,13 @@ def filter_events_by_period(period: str):
             if event['date_obj'] == today:
                 filtered_events.append(event)
     elif period == "неделю":
-        start_week = today - datetime.timedelta(days=today.weekday())  # начало текущей недели
+        start_week = today - datetime.timedelta(days=today.weekday())  # понедельник
         end_week = start_week + datetime.timedelta(days=6)
         for event in EVENTS:
             if start_week <= event['date_obj'] <= end_week:
                 filtered_events.append(event)
     elif period == "месяц":
         start_month = today.replace(day=1)
-        # следующий месяц
         if today.month == 12:
             next_month = today.replace(year=today.year + 1, month=1, day=1)
         else:
@@ -206,39 +186,26 @@ def format_event(event: Dict, index: int, total: int) -> str:
 {event['description']}
 
 🆔 ID события: {event['id']}
-    """
-
+"""
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-
     greeting_template = random.choice(GREETINGS)
-
-    if user.first_name:
-        name = user.first_name
-    elif user.username:
-        name = f"@{user.username}"
-    else:
-        name = "друг"
-
+    name = user.first_name or user.username or "друг"
     message = greeting_template.format(name)
-
     await update.message.reply_text(
         message,
         reply_markup=get_main_keyboard()
     )
 
-
 async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    name = user.first_name if user.first_name else "друг"
-
+    name = user.first_name or "друг"
     response = f"""{name}, вот информация обо мне:
 
 Я - тренировочный бот для практики Росстелеком.
 Показываю список событий и информацию о себе.
 Разработчик: Подшивалов Тимур"""
-
     if update.message:
         await update.message.reply_text(
             response,
@@ -251,77 +218,18 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown',
             reply_markup=get_main_keyboard()
         )
-
 
 async def events(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    # Устанавливаем начальную позицию
-    user_positions[user_id] = 0
-
-    # Получаем первое событие
-    event = EVENTS[0]
-    message_text = format_event(event, 0, len(EVENTS))
-
-    if update.message:
-        await update.message.reply_text(
-            message_text,
-            parse_mode='Markdown',
-            reply_markup=get_events_keyboard(0, len(EVENTS))
-        )
-    elif update.callback_query:
-        await update.callback_query.edit_message_text(
-            message_text,
-            parse_mode='Markdown',
-            reply_markup=get_events_keyboard(0, len(EVENTS))
-        )
-
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    user_id = update.effective_user.id
-    data = query.data
-
-    # Инициализируем позицию пользователя, если ее нет
-    if user_id not in user_positions:
-        user_positions[user_id] = 0
-
-    current_index = user_positions[user_id]
-
-    # Обработка навигации
-    if data.startswith("prev_"):
-        # Листаем назад
-        new_index = max(0, current_index - 1)
-        user_positions[user_id] = new_index
-
-    elif data.startswith("next_"):
-        # Листаем вперед
-        new_index = min(len(EVENTS) - 1, current_index + 1)
-        user_positions[user_id] = new_index
-
-    elif data == "page_info":
-        # Просто показываем номер страницы
-        await query.answer(f"Событие {current_index + 1} из {len(EVENTS)}")
-        return
-
-    # Обновляем отображаемое событие
-    new_index = user_positions[user_id]
-    event = EVENTS[new_index]
-    message_text = format_event(event, new_index, len(EVENTS))
-
-    await query.edit_message_text(
-        message_text,
-        parse_mode='Markdown',
-        reply_markup=get_events_keyboard(new_index, len(EVENTS))
+    # Показываем меню с "За день", "За неделю", "За месяц"
+    await update.message.reply_text(
+        "Выберите период:",
+        reply_markup=get_timeframe_menu()
     )
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
-    name = user.first_name if user.first_name else "друг"
+    name = user.first_name or "друг"
 
     if text in ["За день", "За неделю", "За месяц"]:
         period_map = {
@@ -333,12 +241,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         filtered_events = filter_events_by_period(period_str)
 
         if filtered_events:
-            for idx, event in enumerate(filtered_events):
-                message = format_event(event, idx, len(filtered_events))
-                await update.message.reply_text(
-                    message,
-                    parse_mode='Markdown'
-                )
+            # сохраняем список и текущий индекс
+            context.chat_data['events_list'] = filtered_events
+            context.chat_data['current_index'] = 0
+            event = filtered_events[0]
+            message = format_event(event, 0, len(filtered_events))
+            keyboard = [
+                [
+                    InlineKeyboardButton("◀️ Назад", callback_data="nav_prev"),
+                    InlineKeyboardButton(f"{1}/{len(filtered_events)}", callback_data="page_info"),
+                    InlineKeyboardButton("Вперед ▶️", callback_data="nav_next")
+                ]
+            ]
+            await update.message.reply_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         else:
             await update.message.reply_text(
                 f"Нет событий за выбранный период: {period_str}."
@@ -348,10 +267,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "🎉 События":
         # Показываем меню с "За день", "За неделю", "За месяц"
         await events(update, context)
-        await update.message.reply_text(
-            "Выберите период:",
-            reply_markup=get_timeframe_menu()
-        )
     elif text == "Вернуться в меню":
         await update.message.reply_text(
             f"{name}, возвращаюсь в главное меню.",
@@ -362,51 +277,62 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{name}, я понимаю только команды. Используйте кнопки ниже или /start для начала.",
             reply_markup=get_main_keyboard()
         )
+
 async def handle_callback_query(update, context):
     query = update.callback_query
     await query.answer()
 
-    data = query.data
-    period_map = {
-        'day': 'день',
-        'week': 'неделю',
-        'month': 'месяц'
-    }
-    period_str = period_map.get(data)
-    filtered_events = filter_events_by_period(period_str)
+    if 'chat_data' not in context:
+        context.chat_data['events_list'] = []
+        context.chat_data['current_index'] = 0
 
-    if filtered_events:
-        for idx, event in enumerate(filtered_events):
-            message = format_event(event, idx, len(filtered_events))
-            await query.message.reply_text(
-                message,
-                parse_mode='Markdown'
-            )
-    else:
-        await query.message.reply_text(
-            f"Нет событий за выбранный период: {period_str}."
+    events_list = context.chat_data.get('events_list', [])
+    index = context.chat_data.get('current_index', 0)
+
+    data = query.data
+
+    if data == "nav_prev":
+        if events_list:
+            index = max(0, index - 1)
+            context.chat_data['current_index'] = index
+    elif data == "nav_next":
+        if events_list:
+            index = min(len(events_list) - 1, index + 1)
+            context.chat_data['current_index'] = index
+    elif data == "page_info":
+        # Можно показать сообщение с текущим номером
+        await query.answer(f"Событие {index + 1} из {len(events_list)}")
+        return
+
+    if events_list:
+        event = events_list[index]
+        message = format_event(event, index, len(events_list))
+        keyboard = [
+            [
+                InlineKeyboardButton("◀️ Назад", callback_data="nav_prev"),
+                InlineKeyboardButton(f"{index + 1}/{len(events_list)}", callback_data="page_info"),
+                InlineKeyboardButton("Вперед ▶️", callback_data="nav_next")
+            ]
+        ]
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
 def main():
-    # Создаем приложение
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Регистрируем обработчики команд
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("about", about))
     app.add_handler(CommandHandler("events", events))
-
-    # Обработчик нажатий на inline-кнопки (стрелки)
-    app.add_handler(CallbackQueryHandler(button_handler))
-
-    # Обработчик для текстовых сообщений (кнопки "О боте" и "События")
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CallbackQueryHandler(handle_callback_query))
 
     print("Бот запущен...")
     print("Доступные кнопки: 📚 О боте, 🎉 События")
     print("Для событий доступны стрелки навигации: ◀️ и ▶️")
     app.run_polling()
-
 
 if __name__ == '__main__':
     main()
