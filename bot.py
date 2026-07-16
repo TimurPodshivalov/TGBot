@@ -190,9 +190,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     greeting_template = random.choice(GREETINGS)
     name = user.first_name or user.username or "друг"
-    message = greeting_template.format(name)
     await update.message.reply_text(
-        message,
+        greeting_template.format(name),
         reply_markup=get_main_keyboard()
     )
 
@@ -230,6 +229,9 @@ async def show_events_list(update, context, events: List[Dict]):
             InlineKeyboardButton("◀️ Назад", callback_data="nav_prev"),
             InlineKeyboardButton(f"{1}/{len(events)}", callback_data="page_info"),
             InlineKeyboardButton("Вперед ▶️", callback_data="nav_next")
+        ],
+        [
+            InlineKeyboardButton("Вернуться в меню", callback_data="return_main")
         ]
     ]
     await update.message.reply_text(
@@ -290,8 +292,14 @@ async def handle_callback_query(update, context):
             index = min(len(events_list) - 1, index + 1)
             context.chat_data['current_index'] = index
     elif data == "page_info":
-        # Сообщение с текущим номером
+        # Ответить текущим номером
         await query.answer(f"Событие {index + 1} из {len(events_list)}")
+        return
+    elif data == "return_main":
+        await query.edit_message_text(
+            "Возвращаемся в главное меню.",
+            reply_markup=get_main_keyboard()
+        )
         return
 
     if events_list:
@@ -302,6 +310,9 @@ async def handle_callback_query(update, context):
                 InlineKeyboardButton("◀️ Назад", callback_data="nav_prev"),
                 InlineKeyboardButton(f"{index + 1}/{len(events_list)}", callback_data="page_info"),
                 InlineKeyboardButton("Вперед ▶️", callback_data="nav_next")
+            ],
+            [
+                InlineKeyboardButton("Вернуться в меню", callback_data="return_main")
             ]
         ]
         await query.edit_message_text(
