@@ -407,6 +407,6 @@ def main():
     print("Для событий доступны стрелки навигации: ◀️ и ▶️")
     app.run_polling()
 
-
+#11
 if __name__ == '__main__':
     main()
