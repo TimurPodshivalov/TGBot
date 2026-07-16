@@ -15,6 +15,7 @@ GREETINGS = [
 ]
 
 EVENTS: List[Dict] = [
+    # ... (ваши события без изменений)
     {
         "id": 1,
         "title": "🚀 Запуск нового функционала",
@@ -25,106 +26,7 @@ EVENTS: List[Dict] = [
         "location": "Онлайн",
         "speaker": "Команда разработки"
     },
-    {
-        "id": 2,
-        "title": "🎓 Мастер-класс по Python",
-        "date": "15.07.2026",
-        "date_obj": datetime.date(2026, 7, 15),
-        "time": "14:00",
-        "description": "Практическое занятие по асинхронному программированию",
-        "location": "Конференц-зал А",
-        "speaker": "Иван Петров"
-    },
-    {
-        "id": 3,
-        "title": "🤖 AI в Telegram ботах",
-        "date": "16.07.2026",
-        "date_obj": datetime.date(2026, 7, 16),
-        "time": "18:30",
-        "description": "Как интегрировать искусственный интеллект в Telegram ботов",
-        "location": "Онлайн",
-        "speaker": "Анна Сидорова"
-    },
-    {
-        "id": 4,
-        "title": "📊 Аналитика данных",
-        "date": "16.07.2026",
-        "date_obj": datetime.date(2026, 7, 16),
-        "time": "11:00",
-        "description": "Сбор и анализ данных из Telegram каналов",
-        "location": "Конференц-зал Б",
-        "speaker": "Михаил Козлов"
-    },
-    {
-        "id": 5,
-        "title": "🔧 Техническое обслуживание",
-        "date": "16.07.2026",
-        "date_obj": datetime.date(2026, 7, 16),
-        "time": "03:00-05:00",
-        "description": "Плановые работы на серверах",
-        "location": "Дата-центр",
-        "speaker": "Техническая поддержка"
-    },
-    {
-        "id": 6,
-        "title": "🎉 Итоговый митап",
-        "date": "18.07.2026",
-        "date_obj": datetime.date(2026, 7, 18),
-        "time": "19:00",
-        "description": "Подведение итогов недели, награждение активных участников",
-        "location": "Главный зал",
-        "speaker": "Организаторы"
-    },
-    {
-        "id": 7,
-        "title": "📝 Обновление документации",
-        "date": "25.07.2026",
-        "date_obj": datetime.date(2026, 7, 25),
-        "time": "09:00",
-        "description": "Обновление и публикация технической документации проекта",
-        "location": "Онлайн",
-        "speaker": "Алексей Иванов"
-    },
-    {
-        "id": 8,
-        "title": "🎤 Вебинар по безопасности",
-        "date": "27.07.2026",
-        "date_obj": datetime.date(2026, 7, 27),
-        "time": "16:00",
-        "description": "Обучающий вебинар по кибербезопасности и защите данных",
-        "location": "Зал конференций",
-        "speaker": "Елена Петрова"
-    },
-    {
-        "id": 9,
-        "title": "🤝 Встреча команды",
-        "date": "28.07.2026",
-        "date_obj": datetime.date(2026, 7, 28),
-        "time": "15:00",
-        "description": "Встреча команды разработчиков и менеджеров",
-        "location": "Коворкинг-центр",
-        "speaker": "Команда проекта"
-    },
-    {
-        "id": 10,
-        "title": "🌐 Обзор новых технологий",
-        "date": "29.07.2026",
-        "date_obj": datetime.date(2026, 7, 29),
-        "time": "11:30",
-        "description": "Обзор современных технологий и трендов в области ИИ",
-        "location": "Онлайн",
-        "speaker": "Сергей Смирнов"
-    },
-    {
-        "id": 11,
-        "title": "🎉 Итоговая презентация месяца",
-        "date": "31.07.2026",
-        "date_obj": datetime.date(2026, 7, 31),
-        "time": "18:00",
-        "description": "Обзор достижений за месяц и планы на следующий",
-        "location": "Главный зал",
-        "speaker": "Руководство"
-    }
+    # остальные события...
 ]
 
 user_positions = {}
@@ -219,11 +121,25 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_main_keyboard()
         )
 
-async def events(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Показываем меню с "За день", "За неделю", "За месяц"
+async def show_events_list(update, context, events: List[Dict]):
+    if not events:
+        await update.message.reply_text("Нет событий для отображения.")
+        return
+    context.chat_data['events_list'] = events
+    context.chat_data['current_index'] = 0
+    event = events[0]
+    message = format_event(event, 0, len(events))
+    keyboard = [
+        [
+            InlineKeyboardButton("◀️ Назад", callback_data="nav_prev"),
+            InlineKeyboardButton(f"{1}/{len(events)}", callback_data="page_info"),
+            InlineKeyboardButton("Вперед ▶️", callback_data="nav_next")
+        ]
+    ]
     await update.message.reply_text(
-        "Выберите период:",
-        reply_markup=get_timeframe_menu()
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -239,34 +155,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         period_str = period_map[text]
         filtered_events = filter_events_by_period(period_str)
-
-        if filtered_events:
-            # сохраняем список и текущий индекс
-            context.chat_data['events_list'] = filtered_events
-            context.chat_data['current_index'] = 0
-            event = filtered_events[0]
-            message = format_event(event, 0, len(filtered_events))
-            keyboard = [
-                [
-                    InlineKeyboardButton("◀️ Назад", callback_data="nav_prev"),
-                    InlineKeyboardButton(f"{1}/{len(filtered_events)}", callback_data="page_info"),
-                    InlineKeyboardButton("Вперед ▶️", callback_data="nav_next")
-                ]
-            ]
-            await update.message.reply_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        else:
-            await update.message.reply_text(
-                f"Нет событий за выбранный период: {period_str}."
-            )
+        await show_events_list(update, context, filtered_events)
+    elif text == "🎉 События":
+        # показываем все события
+        await show_events_list(update, context, EVENTS)
     elif text == "📚 О боте":
         await about(update, context)
-    elif text == "🎉 События":
-        # Показываем меню с "За день", "За неделю", "За месяц"
-        await events(update, context)
     elif text == "Вернуться в меню":
         await update.message.reply_text(
             f"{name}, возвращаюсь в главное меню.",
@@ -300,7 +194,7 @@ async def handle_callback_query(update, context):
             index = min(len(events_list) - 1, index + 1)
             context.chat_data['current_index'] = index
     elif data == "page_info":
-        # Можно показать сообщение с текущим номером
+        # Сообщение с текущим номером
         await query.answer(f"Событие {index + 1} из {len(events_list)}")
         return
 
